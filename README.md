@@ -91,9 +91,9 @@ RETRY_MAX_DELAY_MS=10000
 
 ## Installation & Setup
 
-1. **Clone or Navigate to the project directory**:
+1. **Navigate to the project directory**:
    ```bash
-   cd email-hunter-pro # (Or the directory name mailpop was installed to)
+   cd mailpop
    ```
 
 2. **Install Node dependencies**:
