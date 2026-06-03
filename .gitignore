@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Compiled outputs
+dist/
+
+# Configuration and environment variables
+.env
+.npmrc
+
+# Local database, caches, and logs
+logs/
+output/
+custom_input.csv

@@ -1,0 +1,23 @@
+# Exclude source code
+src/
+
+# Exclude configuration files
+tsconfig.json
+eslint.config.js
+prettier.config.js
+.env
+.env.example
+.npmrc
+.npmignore
+
+# Exclude temporary data, caches, and logs
+logs/
+output/
+input.csv
+custom_input.csv
+
+# Exclude package manager lockfiles and dependencies
+node_modules/
+package-lock.json
+bun.lock
+yarn.lock
