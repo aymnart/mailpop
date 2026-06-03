@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 import { OutputCsvRow } from './types/csv.js';
 import { CrawlTarget } from './types/crawler.js';
 import { normalizeDomain, findWebsiteInRow } from './utils/normalize.js';
+import { verifyEmailFallback } from './utils/validators.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8'));
@@ -167,8 +168,7 @@ Options:
     process.exit(1);
   }
 
-  // Construct combined output headers, preserving original columns and adding new ones
-  const outputHeaders = [...inputHeaders];
+  // Construct combined output headers, placing new email columns next to the website column
   const newColumns = [
     'email',
     'email_source',
@@ -176,10 +176,25 @@ Options:
     'confidence_score',
     'discovery_method',
   ];
-  for (const col of newColumns) {
-    if (!outputHeaders.includes(col)) {
-      outputHeaders.push(col);
+
+  // Filter out any existing occurrences of these columns to avoid duplicates
+  const cleanInputHeaders = inputHeaders.filter((h) => !newColumns.includes(h));
+
+  // Find standard website column names
+  const websiteKey = cleanInputHeaders.find((h) =>
+    ['website', 'websiteurl', 'website_url', 'url', 'site', 'web'].includes(h.toLowerCase().trim()),
+  );
+
+  const outputHeaders: string[] = [];
+  for (const h of cleanInputHeaders) {
+    outputHeaders.push(h);
+    if (h === websiteKey) {
+      outputHeaders.push(...newColumns);
     }
+  }
+
+  if (!websiteKey) {
+    outputHeaders.push(...newColumns);
   }
 
   // 2. Initialize crawler and browser
@@ -283,15 +298,34 @@ Options:
         }
 
         // Map crawling result, retaining all original row keys
+        let selectedEmail = result.selectedEmail ? result.selectedEmail.email : '';
+        let emailSource = result.selectedEmail ? result.selectedEmail.emailSource : '';
+        let emailType = result.selectedEmail ? result.selectedEmail.emailType : '';
+        let confidenceScore = result.selectedEmail
+          ? String(result.selectedEmail.confidenceScore)
+          : '';
+        let discoveryMethod = result.selectedEmail ? result.selectedEmail.discoveryMethod : '';
+
+        // If no email detected, try to fall back to hello@domain
+        if (!selectedEmail) {
+          const fallbackEmail = `hello@${target.domain}`;
+          const isFallbackValid = await verifyEmailFallback(fallbackEmail);
+          if (isFallbackValid) {
+            selectedEmail = fallbackEmail;
+            emailSource = target.website;
+            emailType = 'role';
+            confidenceScore = '50';
+            discoveryMethod = 'fallback-hello';
+          }
+        }
+
         const outputRow: OutputCsvRow = {
           ...row,
-          email: result.selectedEmail ? result.selectedEmail.email : '',
-          email_source: result.selectedEmail ? result.selectedEmail.emailSource : '',
-          email_type: result.selectedEmail ? result.selectedEmail.emailType : '',
-          confidence_score: result.selectedEmail
-            ? String(result.selectedEmail.confidenceScore)
-            : '',
-          discovery_method: result.selectedEmail ? result.selectedEmail.discoveryMethod : '',
+          email: selectedEmail,
+          email_source: emailSource,
+          email_type: emailType,
+          confidence_score: confidenceScore,
+          discovery_method: discoveryMethod,
         };
 
         // Append output row incrementally matching the dynamic headers list

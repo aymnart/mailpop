@@ -1,5 +1,6 @@
 import { normalizeDomain } from './normalize.js';
 import { config } from '../config.js';
+import dns from 'dns/promises';
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -70,6 +71,11 @@ export function isValidEmail(email: string): boolean {
     return false;
   }
 
+  // Reject Sentry ingest reporting domains
+  if (domainPart.includes('sentry.io')) {
+    return false;
+  }
+
   // Simple heuristics for temporary or obviously fake emails
   if (
     localPart.startsWith('noreply') ||
@@ -112,4 +118,45 @@ export function isDomainMatch(email: string, targetDomainOrUrl: string): boolean
   const targetDomain = normalizeDomain(targetDomainOrUrl);
 
   return emailDomain === targetDomain || emailDomain.endsWith('.' + targetDomain);
+}
+
+/**
+ * Verifies if a fallback email is valid using Disify API with local DNS MX lookup fallback.
+ * @param email - The fallback email to verify.
+ */
+export async function verifyEmailFallback(email: string): Promise<boolean> {
+  if (!isValidEmail(email)) {
+    return false;
+  }
+
+  const domain = email.split('@')[1];
+  if (!domain) {
+    return false;
+  }
+
+  // 1. Try Disify email verification API
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`https://api.disify.com/v1/email/${email}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = (await res.json()) as { format: boolean; disposable: boolean; dns: boolean };
+      // Email is valid if format matches, not disposable, and DNS MX records exist
+      return data.format && !data.disposable && data.dns;
+    }
+  } catch (_e) {
+    // If API fails, fall back to direct DNS check
+  }
+
+  // 2. DNS MX records lookup fallback
+  try {
+    const mx = await dns.resolveMx(domain);
+    return mx && mx.length > 0;
+  } catch (_e) {
+    return false;
+  }
 }
