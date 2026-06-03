@@ -132,6 +132,9 @@ npx . my_leads.csv enriched_output.csv
 # Using explicit flags
 npx . -i my_leads.csv -o enriched_output.csv
 
+# Excluding specific email prefixes (e.g., privacy, legal, billing)
+npx . -i my_leads.csv -o enriched_output.csv -e privacy,legal,billing
+
 # Viewing CLI help options
 npx . -h
 ```
