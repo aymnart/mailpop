@@ -54,8 +54,14 @@ export function isValidEmail(email: string): boolean {
     return false;
   }
 
-  // Reject user-configured excluded prefixes
-  if (config.excludePrefixes.includes(localPart)) {
+  // Reject user-configured excluded prefixes (matches exact, or delimited by -, ., _, +)
+  const isExcluded = config.excludePrefixes.some((prefix) => {
+    const escaped = prefix.replace(/[-\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`(^|[-._+])` + escaped + `($|[-._+])`, 'i');
+    return regex.test(localPart);
+  });
+
+  if (isExcluded) {
     return false;
   }
 

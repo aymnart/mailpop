@@ -1,9 +1,18 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { CrawlerConfig } from './types/crawler.js';
 
-// Load environment variables from .env
+// 1. Load environment variables from CWD .env (if present)
 dotenv.config();
+
+// 2. Load from package directory .env as a fallback for defaults
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageEnv = path.resolve(__dirname, '../.env');
+if (existsSync(packageEnv)) {
+  dotenv.config({ path: packageEnv });
+}
 
 export interface AppConfig extends CrawlerConfig {
   inputCsv: string;
