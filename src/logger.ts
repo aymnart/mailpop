@@ -1,7 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
-const LOGS_DIR = path.resolve('logs');
+const LOGS_DIR = path.join(os.tmpdir(), 'mailpop-logs');
 
 // ANSI escape codes for styling
 const RESET = '\x1b[0m';

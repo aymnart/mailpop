@@ -1,6 +1,6 @@
 {
   "name": "mailpop",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Production-ready public contact email discovery tool from company websites.",
   "type": "module",
   "main": "dist/index.js",
