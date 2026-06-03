@@ -143,12 +143,13 @@ Options:
     outputPath = path.resolve(positionals[1]);
   }
 
-  await Logger.info(
-    'app-initialize',
-    undefined,
-    undefined,
-    'Running',
-    `Initializing mailpop (Input: ${path.basename(inputPath)}, Output: ${path.basename(outputPath)})...`,
+  await Logger.intro(
+    version,
+    inputPath,
+    outputPath,
+    config.concurrency,
+    config.excludePrefixes,
+    config.checkpointFile,
   );
 
   // 1. Extract dynamic headers from the input CSV
@@ -327,13 +328,7 @@ Options:
     if (!isShuttingDown) {
       await clearCheckpoint(config.checkpointFile);
       const totalDuration = Date.now() - startRunTime;
-      await Logger.info(
-        'runner-complete',
-        undefined,
-        totalDuration,
-        'Success',
-        `Crawl completed successfully. Processed ${processedCount} targets in ${Math.round(totalDuration / 1000)}s.`,
-      );
+      await Logger.outro(processedCount, totalDuration, outputPath);
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
