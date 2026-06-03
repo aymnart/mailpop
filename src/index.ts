@@ -308,7 +308,8 @@ Options:
 
         // If no email detected, try to fall back to hello@domain
         if (!selectedEmail) {
-          const fallbackEmail = `hello@${target.domain}`;
+          const fallbackDomain = normalizeDomain(target.domain);
+          const fallbackEmail = `hello@${fallbackDomain}`;
           const isFallbackValid = await verifyEmailFallback(fallbackEmail);
           if (isFallbackValid) {
             selectedEmail = fallbackEmail;

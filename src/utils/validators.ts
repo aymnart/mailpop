@@ -3,6 +3,8 @@ import { config } from '../config.js';
 import dns from 'dns/promises';
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_LOCAL_PART_LENGTH = 64;
 
 const REJECTED_PREFIXES = [
   'noreply',
@@ -38,6 +40,10 @@ const REJECTED_DOMAINS = [
  * @param email - The email to check.
  */
 export function isValidEmail(email: string): boolean {
+  if (email.length > MAX_EMAIL_LENGTH) {
+    return false;
+  }
+
   if (!EMAIL_REGEX.test(email)) {
     return false;
   }
@@ -49,6 +55,10 @@ export function isValidEmail(email: string): boolean {
 
   const localPart = parts[0].toLowerCase().trim();
   const domainPart = parts[1].toLowerCase().trim();
+
+  if (localPart.length > MAX_LOCAL_PART_LENGTH) {
+    return false;
+  }
 
   // Reject blacklisted prefixes
   if (REJECTED_PREFIXES.includes(localPart)) {
