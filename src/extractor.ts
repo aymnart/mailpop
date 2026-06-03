@@ -1,14 +1,15 @@
-import { load } from 'cheerio';
+import { load, Cheerio, CheerioAPI } from 'cheerio';
+import type { AnyNode } from 'domhandler';
 import { DiscoveredEmail, EmailMetadata, EmailType } from './types/email.js';
 import { normalizeEmail } from './utils/normalize.js';
 import { isValidEmail } from './utils/validators.js';
 
 // Standard email regex for searching inside strings
-const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,10}\b/g;
 
 // Obfuscated email regex matching "name [at] domain [dot] com", "name(at)domain(dot)com", "name AT domain DOT com"
 const OBFUSCATED_REGEX =
-  /([a-zA-Z0-9._%+-]+)\s*(?:\[at\]|\(at\)|\s+at\s+)\s*([a-zA-Z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\s+dot\s+)\s*([a-zA-Z]{2,})/gi;
+  /([a-zA-Z0-9._%+-]+)\s*(?:\[at\]|\(at\)|\s+at\s+)\s*([a-zA-Z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\s+dot\s+)\s*([a-zA-Z]{2,10})\b/gi;
 
 // Base64 candidate regex for extracting potential base64 encoded strings
 const BASE64_CANDIDATE_REGEX = /\b[a-zA-Z0-9+/]{12,80}={0,2}\b/g;
@@ -148,6 +149,23 @@ export function classifyEmailType(email: string): EmailType {
 }
 
 /**
+ * Extract text from a cheerio element, inserting spaces between elements
+ * to prevent adjacent tags from concatenating their text content.
+ */
+export function extractTextWithSpaces(elem: Cheerio<AnyNode>, $: CheerioAPI): string {
+  if (!elem || elem.length === 0) return '';
+  const htmlParts: string[] = [];
+  elem.each((_: number, el: AnyNode) => {
+    htmlParts.push($(el).html() || '');
+  });
+  const html = htmlParts.join(' ');
+  const cleanHtml = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ');
+  return decodeUnicodeEntities(cleanHtml.replace(/<[^>]+>/g, ' '));
+}
+
+/**
  * Extracts all unique emails from a given HTML string and URL.
  */
 export function extractEmails(
@@ -249,7 +267,7 @@ export function extractEmails(
   // 3. Header section extraction
   const headerElem = $('header, [id*="header"], [class*="header"]');
   if (headerElem.length > 0) {
-    const headerText = decodeUnicodeEntities(headerElem.text());
+    const headerText = extractTextWithSpaces(headerElem, $);
     let match: RegExpExecArray | null;
     EMAIL_REGEX.lastIndex = 0;
     while ((match = EMAIL_REGEX.exec(headerText)) !== null) {
@@ -260,7 +278,7 @@ export function extractEmails(
   // 4. Footer section extraction
   const footerElem = $('footer, [id*="footer"], [class*="footer"]');
   if (footerElem.length > 0) {
-    const footerText = decodeUnicodeEntities(footerElem.text());
+    const footerText = extractTextWithSpaces(footerElem, $);
     let match: RegExpExecArray | null;
     EMAIL_REGEX.lastIndex = 0;
     while ((match = EMAIL_REGEX.exec(footerText)) !== null) {
@@ -310,7 +328,7 @@ export function extractEmails(
   });
 
   // 7. Visible Body Text & Obfuscated matches in body
-  const bodyText = decodeUnicodeEntities($('body').text());
+  const bodyText = extractTextWithSpaces($('body'), $);
 
   // Standard matches in body text
   let bodyMatch: RegExpExecArray | null;
