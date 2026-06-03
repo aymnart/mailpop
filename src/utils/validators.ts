@@ -1,4 +1,5 @@
 import { normalizeDomain } from './normalize.js';
+import { config } from '../config.js';
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -50,6 +51,11 @@ export function isValidEmail(email: string): boolean {
 
   // Reject blacklisted prefixes
   if (REJECTED_PREFIXES.includes(localPart)) {
+    return false;
+  }
+
+  // Reject user-configured excluded prefixes
+  if (config.excludePrefixes.includes(localPart)) {
     return false;
   }
 

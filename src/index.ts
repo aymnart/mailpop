@@ -91,6 +91,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   let inputPath = config.inputCsv;
   let outputPath = config.outputCsv;
+  const positionals: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '-i' || args[i] === '--input') {
@@ -98,6 +99,14 @@ async function main(): Promise<void> {
       i++;
     } else if (args[i] === '-o' || args[i] === '--output') {
       outputPath = path.resolve(args[i + 1]);
+      i++;
+    } else if (args[i] === '-e' || args[i] === '--exclude') {
+      const excludeStr = args[i + 1] || '';
+      const list = excludeStr
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      config.excludePrefixes = Array.from(new Set([...config.excludePrefixes, ...list]));
       i++;
     } else if (args[i] === '-h' || args[i] === '--help') {
       process.stdout.write(`
@@ -107,14 +116,16 @@ Usage: npx mailpop [options] [input.csv] [output.csv]
 Options:
   -i, --input <path>     Path to the input CSV file
   -o, --output <path>    Path to the output CSV file
+  -e, --exclude <list>   Comma-separated list of email local-parts to exclude
   -h, --help             Display this help message
 \n`);
       process.exit(0);
+    } else if (!args[i].startsWith('-')) {
+      positionals.push(args[i]);
     }
   }
 
   // Fallback to positional arguments
-  const positionals = args.filter((a) => !a.startsWith('-'));
   if (positionals.length >= 1) {
     inputPath = path.resolve(positionals[0]);
   }

@@ -10,6 +10,7 @@ export interface AppConfig extends CrawlerConfig {
   outputCsv: string;
   checkpointFile: string;
   cacheDir: string;
+  excludePrefixes: string[];
 }
 
 const getEnvNumber = (key: string, defaultValue: number): number => {
@@ -30,6 +31,10 @@ export const config: AppConfig = {
   outputCsv: path.resolve(process.env.OUTPUT_CSV || 'output/output.csv'),
   checkpointFile: path.resolve(process.env.CHECKPOINT_FILE || 'output/checkpoint.json'),
   cacheDir: path.resolve(process.env.CACHE_DIR || 'output/cache'),
+  excludePrefixes: (process.env.EXCLUDE_PREFIXES || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
 
   concurrency: getEnvNumber('CONCURRENCY', 5),
   maxDepth: getEnvNumber('MAX_DEPTH', 2),
