@@ -13,10 +13,16 @@ import { Crawler } from './crawler.js';
 import { Logger } from './logger.js';
 import pLimit from 'p-limit';
 import fs from 'fs/promises';
+import { readFileSync } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { OutputCsvRow } from './types/csv.js';
 import { CrawlTarget } from './types/crawler.js';
 import { normalizeDomain, findWebsiteInRow } from './utils/normalize.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8'));
+const version = pkg.version || 'unknown';
 
 let highestContiguousIndex = -1;
 const completedIndices = new Set<number>();
@@ -108,6 +114,9 @@ async function main(): Promise<void> {
         .filter(Boolean);
       config.excludePrefixes = Array.from(new Set([...config.excludePrefixes, ...list]));
       i++;
+    } else if (args[i] === '-v' || args[i] === '--version') {
+      process.stdout.write(`mailpop v${version}\n`);
+      process.exit(0);
     } else if (args[i] === '-h' || args[i] === '--help') {
       process.stdout.write(`
 mailpop - CLI Guide
@@ -117,6 +126,7 @@ Options:
   -i, --input <path>     Path to the input CSV file
   -o, --output <path>    Path to the output CSV file
   -e, --exclude <list>   Comma-separated list of email local-parts to exclude
+  -v, --version          Display the version number
   -h, --help             Display this help message
 \n`);
       process.exit(0);

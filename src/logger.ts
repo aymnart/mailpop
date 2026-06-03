@@ -3,6 +3,21 @@ import path from 'path';
 
 const LOGS_DIR = path.resolve('logs');
 
+// ANSI escape codes for styling
+const RESET = '\x1b[0m';
+const BOLD = '\x1b[1m';
+const FG_CYAN = '\x1b[36m';
+const FG_GREEN = '\x1b[32m';
+const FG_RED = '\x1b[31m';
+const FG_YELLOW = '\x1b[33m';
+const FG_GRAY = '\x1b[90m';
+const FG_WHITE = '\x1b[37m';
+const TEXT_BLACK = '\x1b[30m';
+
+const BG_CYAN = '\x1b[46m';
+const BG_GREEN = '\x1b[42m';
+const BG_RED = '\x1b[41m';
+
 /**
  * Ensures that the logs directory exists on disk.
  */
@@ -50,7 +65,13 @@ export class Logger {
       message,
     };
 
-    const consoleMsg = `[INFO] ${domain ? `[${domain}] ` : ''}${action}${result ? ` -> ${result}` : ''}${message ? ` | ${message}` : ''}`;
+    const levelTag = `${BOLD}${BG_CYAN}${TEXT_BLACK} INFO ${RESET}`;
+    const domainStr = domain ? ` ${FG_GRAY}[${FG_CYAN}${domain}${FG_GRAY}]${RESET}` : '';
+    const actionStr = ` ${BOLD}${action}${RESET}`;
+    const resultStr = result ? ` -> ${FG_GREEN}${result}${RESET}` : '';
+    const msgStr = message ? ` | ${FG_GRAY}${message}${RESET}` : '';
+
+    const consoleMsg = `${levelTag}${domainStr}${actionStr}${resultStr}${msgStr}`;
     process.stdout.write(consoleMsg + '\n');
 
     await writeLog('app.log', entry);
@@ -76,7 +97,12 @@ export class Logger {
       stack,
     };
 
-    const consoleMsg = `[ERROR] ${domain ? `[${domain}] ` : ''}${action}${errorMsg ? `: ${errorMsg}` : ''}`;
+    const levelTag = `${BOLD}${BG_RED}${FG_WHITE} ERROR ${RESET}`;
+    const domainStr = domain ? ` ${FG_GRAY}[${FG_RED}${domain}${FG_GRAY}]${RESET}` : '';
+    const actionStr = ` ${BOLD}${action}${RESET}`;
+    const errorStr = errorMsg ? `: ${FG_RED}${errorMsg}${RESET}` : '';
+
+    const consoleMsg = `${levelTag}${domainStr}${actionStr}${errorStr}`;
     process.stderr.write(consoleMsg + '\n');
 
     await writeLog('app.log', entry);
@@ -102,7 +128,12 @@ export class Logger {
       discoveryMethod: method,
     };
 
-    const consoleMsg = `[EMAIL] [${domain}] Found ${email} (${method}, confidence: ${confidence}) at ${source}`;
+    const levelTag = `${BOLD}${BG_GREEN}${TEXT_BLACK} EMAIL ${RESET}`;
+    const domainStr = ` ${FG_GRAY}[${FG_CYAN}${domain}${FG_GRAY}]${RESET}`;
+    const emailStr = ` Found ${BOLD}${FG_GREEN}${email}${RESET}`;
+    const detailsStr = ` (${FG_YELLOW}${method}${RESET}, confidence: ${BOLD}${confidence}${RESET}) at ${FG_GRAY}${source}${RESET}`;
+
+    const consoleMsg = `${levelTag}${domainStr}${emailStr}${detailsStr}`;
     process.stdout.write(consoleMsg + '\n');
 
     await writeLog('discovered-emails.log', entry);
