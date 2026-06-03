@@ -83,8 +83,8 @@ export class Crawler {
           }
 
           // Wait for load states to let JavaScript load components (React, Angular, Vue, Next.js, etc.)
-          await page.waitForLoadState('load', { timeout: 3000 }).catch(() => {});
-          await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+          await page.waitForLoadState('load', { timeout: 1500 }).catch(() => {});
+          await page.waitForLoadState('networkidle', { timeout: 1000 }).catch(() => {});
 
           const html = await page.content();
           const title = await page.title().catch(() => '');
@@ -158,11 +158,28 @@ export class Crawler {
         ignoreHTTPSErrors: true,
       });
 
-      // Bandwidth optimization: block assets like images, videos, fonts, and CSS.
-      // This is crucial for performance and avoids loading unnecessary assets.
+      // Bandwidth & CPU optimization: block assets (images, fonts, stylesheets)
+      // and heavy marketing/analytics scripts that hang connection states.
       await context.route('**/*', (route) => {
-        const type = route.request().resourceType();
-        if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
+        const req = route.request();
+        const type = req.resourceType();
+        const url = req.url().toLowerCase();
+
+        const isAsset = ['image', 'media', 'font', 'stylesheet'].includes(type);
+        const isTracking = [
+          'google-analytics',
+          'googletagmanager',
+          'doubleclick',
+          'facebook.net',
+          'hotjar',
+          'segment.io',
+          'mixpanel',
+          'sentry.io',
+          'amplitude',
+          'hubspot',
+        ].some((term) => url.includes(term));
+
+        if (isAsset || isTracking) {
           route.abort().catch(() => {});
         } else {
           route.continue().catch(() => {});
@@ -224,7 +241,13 @@ export class Crawler {
       );
 
       // 3. Traversal (BFS) Loop
-      while (queue.length > 0 && pagesCrawledCount < config.maxPagesPerSite) {
+      let earlyExitTriggered = false;
+
+      while (
+        queue.length > 0 &&
+        pagesCrawledCount < config.maxPagesPerSite &&
+        !earlyExitTriggered
+      ) {
         const elapsed = Date.now() - startTime;
         if (elapsed > config.maxCrawlTimePerSiteMs) {
           await Logger.info(
@@ -237,89 +260,107 @@ export class Crawler {
           break;
         }
 
-        const current = queue.shift();
-        if (!current) {
-          continue;
+        // Dequeue batch of up to 3 pages to load concurrently
+        const batchSize = Math.min(3, queue.length, config.maxPagesPerSite - pagesCrawledCount);
+        const batch: CrawlPage[] = [];
+        for (let i = 0; i < batchSize; i++) {
+          const item = queue.shift();
+          if (item) {
+            batch.push(item);
+          }
         }
 
-        // Apply throttling delay between pages of the SAME website to avoid rate limits
-        if (pagesCrawledCount > 0) {
+        if (batch.length === 0) {
+          break;
+        }
+
+        pagesCrawledCount += batch.length;
+
+        // Apply throttling delay between page batches (if we've already crawled pages)
+        if (pagesCrawledCount > batch.length) {
           await getRandomDelay(config.minDelayMs, config.maxDelayMs);
         }
 
-        pagesCrawledCount++;
-        const pageStart = Date.now();
+        // Crawl current batch pages concurrently
+        await Promise.all(
+          batch.map(async (current) => {
+            if (earlyExitTriggered) {
+              return;
+            }
 
-        try {
-          const { html, title } = await this.loadPage(current.url, context, config);
-          const pageDuration = Date.now() - pageStart;
+            const pageStart = Date.now();
+            try {
+              const { html, title } = await this.loadPage(current.url, context!, config);
+              const pageDuration = Date.now() - pageStart;
 
-          // Extract emails
-          const extracted = extractEmails(html, current.url, title, pageDuration);
+              // Extract emails
+              const extracted = extractEmails(html, current.url, title, pageDuration);
 
-          for (const item of extracted) {
-            // Keep occurrences tracker updated
-            occurrenceCounts[item.email] = (occurrenceCounts[item.email] || 0) + 1;
+              for (const item of extracted) {
+                // Keep occurrences tracker updated
+                occurrenceCounts[item.email] = (occurrenceCounts[item.email] || 0) + 1;
 
-            // Deduplicate: If already found, update with higher confidence if applicable
-            const existingIdx = discoveredEmails.findIndex((e) => e.email === item.email);
-            if (existingIdx === -1) {
-              discoveredEmails.push(item);
-              await Logger.email(
+                // Deduplicate: If already found, update with higher confidence if applicable
+                const existingIdx = discoveredEmails.findIndex((e) => e.email === item.email);
+                if (existingIdx === -1) {
+                  discoveredEmails.push(item);
+                  await Logger.email(
+                    domain,
+                    item.email,
+                    item.emailSource,
+                    item.confidenceScore,
+                    item.discoveryMethod,
+                  );
+                } else {
+                  if (item.confidenceScore > discoveredEmails[existingIdx].confidenceScore) {
+                    discoveredEmails[existingIdx] = item;
+                  }
+                }
+              }
+
+              // Check if we can trigger an early stop
+              const currentBest = selectBestEmail(discoveredEmails, domain, occurrenceCounts);
+              if (
+                currentBest &&
+                currentBest.confidenceScore >= 95 &&
+                isDomainMatch(currentBest.email, domain)
+              ) {
+                earlyExitTriggered = true;
+                await Logger.info(
+                  'crawl-early-stop',
+                  domain,
+                  Date.now() - startTime,
+                  'Success',
+                  `Early exit triggered by: ${currentBest.email} (${currentBest.confidenceScore} score)`,
+                );
+              }
+
+              // Discover and enqueue internal links if depth is within bounds and early exit hasn't fired
+              if (!earlyExitTriggered && current.depth < config.maxDepth) {
+                const childLinks = extractAndFilterLinks(html, current.url, domain);
+                for (const link of childLinks) {
+                  if (!visited.has(link) && visited.size < 100) {
+                    // Safety ceiling to prevent massive Set sizes
+                    visited.add(link);
+                    queue.push({
+                      url: link,
+                      depth: current.depth + 1,
+                      referrer: current.url,
+                    });
+                  }
+                }
+              }
+            } catch (err) {
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              await Logger.error(
+                'page-crawl-error',
                 domain,
-                item.email,
-                item.emailSource,
-                item.confidenceScore,
-                item.discoveryMethod,
+                Date.now() - pageStart,
+                `Failed ${current.url}: ${errorMsg}`,
               );
-            } else {
-              if (item.confidenceScore > discoveredEmails[existingIdx].confidenceScore) {
-                discoveredEmails[existingIdx] = item;
-              }
             }
-          }
-
-          // EARLY STOP OPTIMIZATION: If we found a high confidence, domain-matching contact email, stop crawling
-          const currentBest = selectBestEmail(discoveredEmails, domain, occurrenceCounts);
-          if (
-            currentBest &&
-            currentBest.confidenceScore >= 95 &&
-            isDomainMatch(currentBest.email, domain)
-          ) {
-            await Logger.info(
-              'crawl-early-stop',
-              domain,
-              Date.now() - startTime,
-              'Success',
-              `Early exit triggered by: ${currentBest.email} (${currentBest.confidenceScore} score)`,
-            );
-            break;
-          }
-
-          // Discover and enqueue internal links if depth is within bounds
-          if (current.depth < config.maxDepth) {
-            const childLinks = extractAndFilterLinks(html, current.url, domain);
-            for (const link of childLinks) {
-              if (!visited.has(link) && visited.size < 100) {
-                // Safety ceiling to prevent massive Set sizes
-                visited.add(link);
-                queue.push({
-                  url: link,
-                  depth: current.depth + 1,
-                  referrer: current.url,
-                });
-              }
-            }
-          }
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          await Logger.error(
-            'page-crawl-error',
-            domain,
-            Date.now() - pageStart,
-            `Failed ${current.url}: ${errorMsg}`,
-          );
-        }
+          }),
+        );
       }
 
       // 4. Select Final Email
